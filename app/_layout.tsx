@@ -1,29 +1,32 @@
 import '../global.css';
-import { Stack } from 'expo-router';
+import { Slot } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PicksProvider } from '../src/context/PicksContext';
+import { NavBar } from '../src/components/NavBar';
+import { View, StyleSheet } from 'react-native';
 
 export default function Layout() {
     return (
         <SafeAreaProvider>
             <PicksProvider>
-                <Stack
-                    screenOptions={{
-                        headerStyle: {
-                            backgroundColor: '#121212',
-                        },
-                        headerTintColor: '#fff',
-                        headerTitleStyle: {
-                            fontWeight: 'bold',
-                        },
-                        contentStyle: {
-                            backgroundColor: '#121212',
-                        },
-                    }}
-                >
-                    <Stack.Screen name="index" options={{ title: 'CFB Picks' }} />
-                </Stack>
+                <View style={styles.container}>
+                    <NavBar />
+                    <View style={styles.content}>
+                        <Slot />
+                    </View>
+                </View>
             </PicksProvider>
         </SafeAreaProvider>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        flexDirection: 'row', // Side-by-side layout
+        backgroundColor: '#f5f5f5',
+    },
+    content: {
+        flex: 1,
+    },
+});

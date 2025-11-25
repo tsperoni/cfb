@@ -32,22 +32,12 @@ export default function Home() {
     const stats = getAggregateRecord(statsScope, selectedYear, selectedWeek);
     const { wins, losses, pushes } = stats;
 
-    // Calculate total net money for the current scope
-    const totalNet = (wins * 100) - (losses * 110);
-    const totalMoneyText = totalNet > 0 ? `+$${totalNet}` : totalNet < 0 ? `-$${Math.abs(totalNet)}` : `$0`;
-    const totalMoneyColor = totalNet > 0 ? '#059669' : totalNet < 0 ? '#dc2626' : '#6b7280';
-
-    const handlePick = async (gameId: number, team: 'home' | 'away') => {
-        const game = games.find(g => g.id === gameId);
-        if (!game) return;
-
-        const spread = game.lines?.[0]?.spread || 0;
-        // Pass scores to savePick - it will calculate result automatically in one operation
-        await savePick(
-            gameId,
+    const handlePickTeam = (game: any, team: 'home' | 'away', spread: number) => {
+        savePick(
+            game.id,
             team,
-            selectedYear,
-            selectedWeek,
+            game.season,
+            game.week,
             game.homeTeam,
             game.awayTeam,
             spread,
@@ -56,23 +46,13 @@ export default function Home() {
         );
     };
 
-    // Filter games based on search query
-    const filteredGames = games.filter(game =>
-        (game.homeTeam?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-        (game.awayTeam?.toLowerCase() || '').includes(searchQuery.toLowerCase())
-    );
-
-    // Generate week options (1-15)
-    const weeks = Array.from({ length: 15 }, (_, i) => i + 1);
-
-    if (gamesLoading) {
+    const filteredGames = games.filter(game => {
+        const query = searchQuery.toLowerCase();
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#00529b" />
-                <Text style={styles.loadingText}>Loading games...</Text>
-            </View>
+            game.homeTeam.toLowerCase().includes(query) ||
+            game.awayTeam.toLowerCase().includes(query)
         );
-    }
+    });
 
     return (
         <View style={styles.container}>
@@ -82,152 +62,112 @@ export default function Home() {
                 renderItem={({ item }) => (
                     <GameCard
                         game={item}
-                        onPickTeam={(team) => handlePick(item.id, team)}
+                        onPickTeam={(team, spread) => handlePickTeam(item, team, spread)}
                         pickedTeam={picks[item.id]}
                         getLogo={getLogo}
                     />
                 )}
                 contentContainerStyle={{ paddingBottom: 20 }}
                 ListHeaderComponent={
-                    <View style={styles.header}>
-                        <View style={styles.searchContainer}>
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="Search teams..."
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                                placeholderTextColor="#9ca3af"
-                            />
-                        </View>
-
+                    <View style={styles.statsHeader}>
                         <View style={styles.headerRow}>
                             <View>
                                 <Text style={styles.headerTitle}>CFB Picks</Text>
-                                <Link href="/results" asChild>
-                                    <TouchableOpacity style={styles.historyButton}>
-                                        <Text style={styles.historyButtonText}>View History →</Text>
-                                    </TouchableOpacity>
-                                </Link>
-                            </View>
-
-                            <View style={styles.statsContainer}>
-                                {/* Stats Scope Toggles */}
-                                <View style={styles.statsScopeSelector}>
-                                    <TouchableOpacity
-                                        style={[styles.scopeButton, statsScope === 'week' && styles.scopeButtonActive]}
-                                        onPress={() => setStatsScope('week')}
-                                    >
-                                        <Text style={[styles.scopeText, statsScope === 'week' && styles.scopeTextActive]}>Wk</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[styles.scopeButton, statsScope === 'year' && styles.scopeButtonActive]}
-                                        onPress={() => setStatsScope('year')}
-                                    >
-                                        <Text style={[styles.scopeText, statsScope === 'year' && styles.scopeTextActive]}>Yr</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[styles.scopeButton, statsScope === 'all' && styles.scopeButtonActive]}
-                                        onPress={() => setStatsScope('all')}
-                                    >
-                                        <Text style={[styles.scopeText, statsScope === 'all' && styles.scopeTextActive]}>All</Text>
-                                    </TouchableOpacity>
+                                <View style={styles.searchContainer}>
+                                    <TextInput
+                                        style={styles.searchInput}
+                                        placeholder="Search teams..."
+                                        value={searchQuery}
+                                        onChangeText={setSearchQuery}
+                                        placeholderTextColor="#9ca3af"
+                                    />
                                 </View>
-
-                                {/* Win/Loss Record & Money */}
+                            </View>
+                            <View style={styles.statsContainer}>
+                                <View style={styles.statsScopeSelector}>
+                                    {(['week', 'year', 'all'] as const).map((scope) => (
+                                        <TouchableOpacity
+                                            key={scope}
+                                            style={[styles.scopeButton, statsScope === scope && styles.scopeButtonActive]}
+                                            onPress={() => setStatsScope(scope)}
+                                        >
+                                            <Text style={[styles.scopeText, statsScope === scope && styles.scopeTextActive]}>
+                                                {scope.toUpperCase()}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
                                 <View style={styles.recordContainer}>
                                     <Text style={styles.wins}>{wins}W</Text>
                                     <Text style={styles.losses}>{losses}L</Text>
                                     <Text style={styles.pushes}>{pushes}P</Text>
-                                    <Text style={[styles.totalMoney, { color: totalMoneyColor }]}>{totalMoneyText}</Text>
                                 </View>
                             </View>
                         </View>
 
-                        {/* Compact Selectors Row */}
                         <View style={styles.selectorRow}>
-                            {/* Year Navigator (Left) */}
                             <View style={styles.yearNavigator}>
                                 <TouchableOpacity
                                     style={styles.arrowButton}
-                                    onPress={() => setSelectedYear(selectedYear - 1)}
-                                    disabled={selectedYear <= 2020}
+                                    onPress={() => setSelectedYear(y => y - 1)}
                                 >
-                                    <Text style={[styles.arrowText, selectedYear <= 2020 && styles.arrowDisabled]}>←</Text>
+                                    <Text style={styles.arrowText}>←</Text>
                                 </TouchableOpacity>
-
                                 <View style={styles.yearDisplay}>
-                                    <Text style={styles.yearLabel}>Year</Text>
+                                    <Text style={styles.yearLabel}>SEASON</Text>
                                     <Text style={styles.yearNumber}>{selectedYear}</Text>
                                 </View>
-
                                 <TouchableOpacity
                                     style={styles.arrowButton}
-                                    onPress={() => setSelectedYear(selectedYear + 1)}
-                                    disabled={selectedYear >= 2025}
+                                    onPress={() => setSelectedYear(y => y + 1)}
                                 >
-                                    <Text style={[styles.arrowText, selectedYear >= 2025 && styles.arrowDisabled]}>→</Text>
+                                    <Text style={styles.arrowText}>→</Text>
                                 </TouchableOpacity>
                             </View>
 
-                            {/* Week Pills (Right - Scrollable) */}
                             <ScrollView
                                 horizontal
-                                showsHorizontalScrollIndicator={false}
                                 style={styles.weekSelector}
                                 contentContainerStyle={styles.weekSelectorContent}
+                                showsHorizontalScrollIndicator={false}
                             >
-                                {weeks.map((week) => {
+                                {Array.from({ length: 18 }, (_, i) => i + 1).map((week) => {
                                     const weekStats = getAggregateRecord('week', selectedYear, week);
-                                    const total = weekStats.wins + weekStats.losses;
-                                    const pct = total > 0 ? Math.round((weekStats.wins / total) * 100) : 0;
-                                    const hasPicks = total > 0 || weekStats.pushes > 0;
+                                    const hasStats = weekStats.wins > 0 || weekStats.losses > 0 || weekStats.pushes > 0;
 
-                                    // Show stats if week has started OR if user has picks
-                                    const showStats = isWeekStarted(week) || hasPicks;
-
-                                    // Calculate net money: Wins = +100, Losses = -110
-                                    const net = (weekStats.wins * 100) - (weekStats.losses * 110);
-                                    const moneyText = net > 0 ? `+$${net}` : net < 0 ? `-$${Math.abs(net)}` : `$0`;
-                                    const moneyColor = net > 0 ? '#059669' : net < 0 ? '#dc2626' : '#6b7280';
+                                    const total = weekStats.wins + weekStats.losses + weekStats.pushes;
+                                    const winPct = total > 0 ? Math.round((weekStats.wins / total) * 100) : 0;
+                                    const money = (weekStats.wins * 100) - (weekStats.losses * 110);
+                                    const moneyStr = money > 0 ? `+$${money}` : money < 0 ? `-$${Math.abs(money)}` : `$0`;
+                                    const moneyColor = money > 0 ? '#059669' : money < 0 ? '#dc2626' : '#6b7280';
 
                                     return (
-                                        <View key={week} style={styles.weekItemContainer}>
-                                            <Text style={[
-                                                styles.weekStatsText,
-                                                !showStats && styles.weekStatsTextHidden
-                                            ]}>
-                                                {showStats ? `${weekStats.wins}-${weekStats.losses} (${pct}%)` : ' '}
+                                        <TouchableOpacity
+                                            key={week}
+                                            style={styles.weekItemContainer}
+                                            onPress={() => setSelectedWeek(week)}
+                                        >
+                                            <Text style={[styles.weekStatsText, !hasStats && styles.weekStatsTextHidden]}>
+                                                {hasStats ? `${weekStats.wins}-${weekStats.losses}-${weekStats.pushes} (${winPct}%)` : '0-0-0 (0%)'}
                                             </Text>
-                                            <Text style={[
-                                                styles.weekMoneyText,
-                                                !showStats && styles.weekStatsTextHidden,
-                                                { color: moneyColor }
-                                            ]}>
-                                                {showStats ? moneyText : ' '}
+                                            <Text style={[styles.weekMoneyText, { color: hasStats ? moneyColor : 'transparent' }]}>
+                                                {moneyStr}
                                             </Text>
-
-                                            <TouchableOpacity
-                                                style={[
-                                                    styles.weekPill,
-                                                    selectedWeek === week && styles.weekPillActive
-                                                ]}
-                                                onPress={() => setSelectedWeek(week)}
-                                            >
-                                                <Text style={[
-                                                    styles.weekText,
-                                                    selectedWeek === week && styles.weekTextActive
-                                                ]}>Wk {week}</Text>
-                                            </TouchableOpacity>
-                                        </View>
+                                            <View style={[styles.weekPill, selectedWeek === week && styles.weekPillActive]}>
+                                                <Text style={[styles.weekText, selectedWeek === week && styles.weekTextActive]}>
+                                                    Week {week}
+                                                </Text>
+                                            </View>
+                                        </TouchableOpacity>
                                     );
                                 })}
                             </ScrollView>
-                        </View>
-                    </View>
+                        </View >
+                    </View >
                 }
             />
-            <StatusBar style="light" />
-        </View>
+            < StatusBar style="light" />
+        </View >
     );
 }
 
@@ -249,9 +189,9 @@ const styles = StyleSheet.create({
         marginTop: 16,
         fontSize: 14,
     },
-    header: {
+
+    statsHeader: {
         marginBottom: 20,
-        marginTop: 8,
         backgroundColor: '#ffffff',
         padding: 16,
         borderRadius: 8,
@@ -262,7 +202,8 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     searchContainer: {
-        marginBottom: 16,
+        marginTop: 8,
+        width: 200,
     },
     searchInput: {
         backgroundColor: '#f3f4f6',

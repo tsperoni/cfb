@@ -149,7 +149,7 @@ export default function Results() {
 
     return (
         <View style={styles.container}>
-            <Stack.Screen options={{ title: 'Betting History' }} />
+
 
             {/* Year Filter */}
             <View style={styles.filterContainer}>

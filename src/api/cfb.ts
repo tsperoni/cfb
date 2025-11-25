@@ -12,7 +12,7 @@ const client = axios.create({
     },
 });
 
-export const getGames = async (year: number, week: number, seasonType: string = 'regular'): Promise<Game[]> => {
+export const getGames = async (year: number, week?: number, seasonType: string = 'regular'): Promise<Game[]> => {
     try {
         // Fetch both games (schedule/scores) and lines (odds)
         const [gamesResponse, linesResponse] = await Promise.all([

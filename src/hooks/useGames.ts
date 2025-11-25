@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Game } from '../types';
 import { getGames } from '../api/cfb';
 
-export const useGames = (year: number, week: number) => {
+export const useGames = (year: number, week?: number) => {
     const [games, setGames] = useState<Game[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
