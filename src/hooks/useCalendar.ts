@@ -51,5 +51,29 @@ export const useCalendar = (year: number) => {
         return new Date() >= new Date(weekData.firstGameStart);
     };
 
-    return { calendar, isWeekStarted, loading };
+    const getCurrentWeek = () => {
+        if (calendar.length === 0) return 1;
+
+        const now = new Date();
+        // Find the week that contains the current date
+        const current = calendar.find(w => {
+            const start = new Date(w.startDate);
+            const end = new Date(w.endDate);
+            return now >= start && now <= end;
+        });
+
+        if (current) return current.week;
+
+        // If not found, check if before season
+        const firstWeek = calendar[0];
+        if (now < new Date(firstWeek.startDate)) return 1;
+
+        // If after season, return last week
+        const lastWeek = calendar[calendar.length - 1];
+        if (now > new Date(lastWeek.endDate)) return lastWeek.week;
+
+        return 1;
+    };
+
+    return { calendar, isWeekStarted, getCurrentWeek, loading };
 };

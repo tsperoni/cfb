@@ -14,19 +14,41 @@ const client = axios.create({
 
 export const getGames = async (year: number, week: number, seasonType: string = 'regular'): Promise<Game[]> => {
     try {
-        // We need to fetch games first to get the schedule, then lines to get the odds.
-        // Or we can just fetch lines if we only care about games with odds.
-        // Let's fetch lines as it contains game info usually, or we might need to merge.
-        // The /lines endpoint returns game info + lines.
+        // Fetch both games (schedule/scores) and lines (odds)
+        const [gamesResponse, linesResponse] = await Promise.all([
+            client.get('/games', {
+                params: { year, week, seasonType }
+            }),
+            client.get('/lines', {
+                params: { year, week, seasonType }
+            })
+        ]);
 
-        const response = await client.get('/lines', {
-            params: {
-                year,
-                week,
-                seasonType,
-            },
+        const gamesData = gamesResponse.data;
+        const linesData = linesResponse.data;
+
+        // Create a map of lines by game ID for faster lookup
+        const linesMap = new Map();
+        linesData.forEach((game: any) => {
+            linesMap.set(game.id, game.lines);
         });
-        return response.data;
+
+        // Map games to our Game interface and attach lines
+        return gamesData.map((game: any) => ({
+            id: game.id,
+            season: game.season,
+            week: game.week,
+            seasonType: game.seasonType,
+            startDate: game.startDate,
+            homeTeam: game.homeTeam,
+            homeConference: game.homeConference,
+            homeScore: game.homePoints,
+            awayTeam: game.awayTeam,
+            awayConference: game.awayConference,
+            awayScore: game.awayPoints,
+            lines: linesMap.get(game.id) || []
+        }));
+
     } catch (error) {
         console.error('Error fetching games:', error);
         // Return mock data if API fails (likely due to missing key)

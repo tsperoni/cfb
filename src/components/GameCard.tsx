@@ -18,8 +18,9 @@ export const GameCard = ({ game, onPickTeam, pickedTeam, getLogo }: GameCardProp
     const awaySpreadDisplay = formatSpread(-spread);
 
     const gameDate = new Date(game.startDate);
-    const dateStr = gameDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const timeStr = gameDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const isValidDate = !isNaN(gameDate.getTime());
+    const dateStr = isValidDate ? gameDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD';
+    const timeStr = isValidDate ? gameDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
 
     const awayLogo = getLogo ? (getLogo(game.awayTeam) || getTeamLogo(game.awayTeam)) : getTeamLogo(game.awayTeam);
     const homeLogo = getLogo ? (getLogo(game.homeTeam) || getTeamLogo(game.homeTeam)) : getTeamLogo(game.homeTeam);
@@ -103,9 +104,13 @@ export const GameCard = ({ game, onPickTeam, pickedTeam, getLogo }: GameCardProp
                         ]}>{awaySpreadDisplay}</Text>
                     </View>
 
-                    {awayResult === 'win' && <Text style={styles.resultIcon}>✅</Text>}
-                    {awayResult === 'loss' && <Text style={styles.resultIcon}>❌</Text>}
-                    {awayResult === 'push' && <Text style={styles.resultIcon}>P</Text>}
+                    {awayResult && (
+                        <View style={styles.resultIconWrapper}>
+                            <Text style={styles.resultIcon}>
+                                {awayResult === 'win' ? '✅' : awayResult === 'loss' ? '❌' : 'P'}
+                            </Text>
+                        </View>
+                    )}
                 </TouchableOpacity>
 
                 {/* VS Divider */}
@@ -150,9 +155,13 @@ export const GameCard = ({ game, onPickTeam, pickedTeam, getLogo }: GameCardProp
                         ]}>{homeSpreadDisplay}</Text>
                     </View>
 
-                    {homeResult === 'win' && <Text style={styles.resultIcon}>✅</Text>}
-                    {homeResult === 'loss' && <Text style={styles.resultIcon}>❌</Text>}
-                    {homeResult === 'push' && <Text style={styles.resultIcon}>P</Text>}
+                    {homeResult && (
+                        <View style={styles.resultIconWrapper}>
+                            <Text style={styles.resultIcon}>
+                                {homeResult === 'win' ? '✅' : homeResult === 'loss' ? '❌' : 'P'}
+                            </Text>
+                        </View>
+                    )}
                 </TouchableOpacity>
             </View>
 
@@ -233,7 +242,8 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingVertical: 12,
-        paddingHorizontal: 12,
+        paddingLeft: 12,
+        paddingRight: 40,
         borderRadius: 6,
         backgroundColor: '#f9fafb',
         marginBottom: 8,
@@ -318,9 +328,17 @@ const styles = StyleSheet.create({
         color: '#111827',
         marginRight: 12,
     },
+    resultIconWrapper: {
+        position: 'absolute',
+        right: 10,
+        top: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: 24,
+    },
     resultIcon: {
         fontSize: 16,
-        marginLeft: 8,
     },
     ouText: {
         color: '#6b7280',

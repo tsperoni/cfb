@@ -1,22 +1,32 @@
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGames } from '../src/hooks/useGames';
 import { GameCard } from '../src/components/GameCard';
 import { usePicks } from '../src/context/PicksContext';
 import { useTeamLogos } from '../src/hooks/useTeamLogos';
 import { useCalendar } from '../src/hooks/useCalendar';
+import { Link } from 'expo-router';
 
 export default function Home() {
-    const [selectedYear, setSelectedYear] = useState(2024);
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedWeek, setSelectedWeek] = useState(1);
     const [statsScope, setStatsScope] = useState<'week' | 'year' | 'all'>('week');
     const [searchQuery, setSearchQuery] = useState('');
+    const [initialized, setInitialized] = useState(false);
 
-    const { games, loading, error } = useGames(selectedYear, selectedWeek);
+    const { games, loading: gamesLoading, error } = useGames(selectedYear, selectedWeek);
     const { picks, savePick, updateGameResult, getAggregateRecord } = usePicks();
     const { getLogo } = useTeamLogos();
-    const { isWeekStarted } = useCalendar(selectedYear);
+    const { isWeekStarted, getCurrentWeek, loading: calendarLoading } = useCalendar(selectedYear);
+
+    useEffect(() => {
+        if (!calendarLoading && !initialized && getCurrentWeek) {
+            const current = getCurrentWeek();
+            setSelectedWeek(current);
+            setInitialized(true);
+        }
+    }, [calendarLoading, initialized, getCurrentWeek]);
 
     // Get stats based on scope - properly aggregates across weeks/years
     const stats = getAggregateRecord(statsScope, selectedYear, selectedWeek);
@@ -48,14 +58,14 @@ export default function Home() {
 
     // Filter games based on search query
     const filteredGames = games.filter(game =>
-        game.homeTeam.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        game.awayTeam.toLowerCase().includes(searchQuery.toLowerCase())
+        (game.homeTeam?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+        (game.awayTeam?.toLowerCase() || '').includes(searchQuery.toLowerCase())
     );
 
     // Generate week options (1-15)
     const weeks = Array.from({ length: 15 }, (_, i) => i + 1);
 
-    if (loading) {
+    if (gamesLoading) {
         return (
             <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#00529b" />
@@ -91,7 +101,14 @@ export default function Home() {
                         </View>
 
                         <View style={styles.headerRow}>
-                            <Text style={styles.headerTitle}>CFB Picks</Text>
+                            <View>
+                                <Text style={styles.headerTitle}>CFB Picks</Text>
+                                <Link href="/results" asChild>
+                                    <TouchableOpacity style={styles.historyButton}>
+                                        <Text style={styles.historyButtonText}>View History →</Text>
+                                    </TouchableOpacity>
+                                </Link>
+                            </View>
 
                             <View style={styles.statsContainer}>
                                 {/* Stats Scope Toggles */}
@@ -409,5 +426,13 @@ const styles = StyleSheet.create({
     },
     weekTextActive: {
         color: '#ffffff',
+    },
+    historyButton: {
+        marginTop: 4,
+    },
+    historyButtonText: {
+        color: '#3b82f6',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });
