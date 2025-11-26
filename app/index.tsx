@@ -6,7 +6,9 @@ import { GameCard } from '../src/components/GameCard';
 import { usePicks } from '../src/context/PicksContext';
 import { useTeamLogos } from '../src/hooks/useTeamLogos';
 import { useCalendar } from '../src/hooks/useCalendar';
+import { useSmartPicks } from '../src/hooks/useSmartPicks';
 import { Link } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function Home() {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -15,10 +17,22 @@ export default function Home() {
     const [searchQuery, setSearchQuery] = useState('');
     const [initialized, setInitialized] = useState(false);
 
-    const { games, loading: gamesLoading, error } = useGames(selectedYear, selectedWeek);
-    const { picks, savePick, updateGameResult, getAggregateRecord } = usePicks();
+    const { games, loading: gamesLoading, error, refresh } = useGames(selectedYear, selectedWeek);
+    const { picks: smartPicks, loading: smartPicksLoading } = useSmartPicks(selectedYear, selectedWeek);
+    const { picks, pickData, savePick, updateGameResult, getAggregateRecord } = usePicks();
     const { getLogo } = useTeamLogos();
     const { isWeekStarted, getCurrentWeek, loading: calendarLoading } = useCalendar(selectedYear);
+
+    // Create a map for quick smart pick lookup
+    const smartPicksMap = new Map();
+    smartPicks.forEach(p => {
+        smartPicksMap.set(p.game.id, {
+            homeDom: p.homeTeamStats?.dominanceScore || 0,
+            awayDom: p.awayTeamStats?.dominanceScore || 0,
+            recommendation: p.recommendation,
+            delta: p.delta
+        });
+    });
 
     useEffect(() => {
         if (!calendarLoading && !initialized && getCurrentWeek) {
@@ -27,6 +41,22 @@ export default function Home() {
             setInitialized(true);
         }
     }, [calendarLoading, initialized, getCurrentWeek]);
+
+    // Sync game results to context to ensure W/L is accurate
+    useEffect(() => {
+        if (games.length > 0) {
+            games.forEach(game => {
+                // If game is final and we have a pick
+                if (typeof game.homeScore === 'number' && typeof game.awayScore === 'number' && picks[game.id]) {
+                    const pick = pickData[game.id];
+                    // If result is missing or scores don't match, update it
+                    if (pick && (!pick.result || pick.homeScore !== game.homeScore || pick.awayScore !== game.awayScore)) {
+                        updateGameResult(game.id, game.homeScore, game.awayScore);
+                    }
+                }
+            });
+        }
+    }, [games, picks, pickData]);
 
     // Get stats based on scope - properly aggregates across weeks/years
     const stats = getAggregateRecord(statsScope, selectedYear, selectedWeek);
@@ -48,9 +78,11 @@ export default function Home() {
 
     const filteredGames = games.filter(game => {
         const query = searchQuery.toLowerCase();
+        const hasOdds = game.lines && game.lines.length > 0;
         return (
-            game.homeTeam.toLowerCase().includes(query) ||
-            game.awayTeam.toLowerCase().includes(query)
+            hasOdds &&
+            (game.homeTeam.toLowerCase().includes(query) ||
+                game.awayTeam.toLowerCase().includes(query))
         );
     });
 
@@ -65,6 +97,7 @@ export default function Home() {
                         onPickTeam={(team, spread) => handlePickTeam(item, team, spread)}
                         pickedTeam={picks[item.id]}
                         getLogo={getLogo}
+                        smartPick={smartPicksMap.get(item.id)}
                     />
                 )}
                 contentContainerStyle={{ paddingBottom: 20 }}
@@ -72,7 +105,16 @@ export default function Home() {
                     <View style={styles.statsHeader}>
                         <View style={styles.headerRow}>
                             <View>
-                                <Text style={styles.headerTitle}>CFB Picks</Text>
+                                <View style={styles.titleRow}>
+                                    <Text style={styles.headerTitle}>CFB Picks</Text>
+                                    <TouchableOpacity onPress={refresh} style={styles.refreshButton} disabled={gamesLoading}>
+                                        {gamesLoading ? (
+                                            <ActivityIndicator size="small" color="#3b82f6" />
+                                        ) : (
+                                            <Ionicons name="refresh" size={20} color="#3b82f6" />
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
                                 <View style={styles.searchContainer}>
                                     <TextInput
                                         style={styles.searchInput}
@@ -224,6 +266,14 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: 'bold',
     },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    refreshButton: {
+        padding: 4,
+    },
     statsContainer: {
         alignItems: 'flex-end',
     },
@@ -279,7 +329,7 @@ const styles = StyleSheet.create({
     selectorRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        alignItems: 'flex-end', // Align to bottom so arrows match pills
         paddingTop: 12,
         borderTopWidth: 1,
         borderTopColor: '#f3f4f6',
@@ -288,6 +338,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
+        paddingBottom: 6, // Match the bottom padding/margin of week pills
     },
     arrowButton: {
         width: 32,

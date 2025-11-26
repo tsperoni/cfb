@@ -1,0 +1,2 @@
+1. The Stats page should have a weekly pill menu too.  Stats update with a filter on games played before selected week.
+2. When I clock on a team in anyview, it should drop down and show weekly results

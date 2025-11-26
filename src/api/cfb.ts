@@ -2,7 +2,8 @@ import axios from 'axios';
 import { Game } from '../types';
 
 const API_BASE_URL = 'https://api.collegefootballdata.com';
-const API_KEY = '68I0+/AR/fEzNdjuXL+olpy7IKkDyLLp77arOlSElO09oR/kP3PCFgmEmCIrpRPF'; // User needs to provide this
+//const API_KEY = '68I0+/AR/fEzNdjuXL+olpy7IKkDyLLp77arOlSElO09oR/kP3PCFgmEmCIrpRPF'; // User needs to provide this
+const API_KEY = 'fWQmfLfJLMKtJYTmsO/YEAbedhB7Eq2Pb7wwJe4cTZgAqNaQFTrjAD/oLXsOcKQu'; // tsperoni@acadiangroup.com
 
 const client = axios.create({
     baseURL: API_BASE_URL,

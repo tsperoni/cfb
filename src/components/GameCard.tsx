@@ -2,14 +2,22 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Game } from '../types';
 import { getTeamLogo } from '../utils/teamLogos';
 
+export interface SmartPickData {
+    homeDom: number;
+    awayDom: number;
+    recommendation: string;
+    delta: number;
+}
+
 interface GameCardProps {
     game: Game;
     onPickTeam: (team: 'home' | 'away', spread: number) => void;
     pickedTeam?: 'home' | 'away';
     getLogo?: (teamName: string) => string | null;
+    smartPick?: SmartPickData;
 }
 
-export const GameCard = ({ game, onPickTeam, pickedTeam, getLogo }: GameCardProps) => {
+export const GameCard = ({ game, onPickTeam, pickedTeam, getLogo, smartPick }: GameCardProps) => {
     const line = game.lines?.[0];
     const spread = line?.spread || 0;
 
@@ -45,6 +53,16 @@ export const GameCard = ({ game, onPickTeam, pickedTeam, getLogo }: GameCardProp
 
     const homeResult = getPickResult('home');
     const awayResult = getPickResult('away');
+
+    // Determine if we should show a badge for a team
+    const showAwayBadge = smartPick && (smartPick.recommendation.includes('Away'));
+    const showHomeBadge = smartPick && (smartPick.recommendation.includes('Home'));
+
+    const getBadgeColor = (rec: string) => {
+        if (rec.includes('Strong')) return '#059669';
+        if (rec.includes('Lean')) return '#3b82f6';
+        return '#6b7280';
+    };
 
     return (
         <View style={styles.card}>
@@ -88,6 +106,16 @@ export const GameCard = ({ game, onPickTeam, pickedTeam, getLogo }: GameCardProp
                     <View style={styles.teamInfo}>
                         <Text style={styles.teamName}>{game.awayTeam}</Text>
                         <Text style={styles.conferenceText}>{game.awayConference}</Text>
+                        {smartPick && (
+                            <Text style={styles.domText}>DOM: {smartPick.awayDom.toFixed(1)}</Text>
+                        )}
+                        {showAwayBadge && smartPick && (
+                            <View style={[styles.smartBadge, { backgroundColor: getBadgeColor(smartPick.recommendation) }]}>
+                                <Text style={styles.smartBadgeText}>
+                                    {smartPick.recommendation.toUpperCase()} (Delta: {Math.abs(smartPick.delta).toFixed(1)})
+                                </Text>
+                            </View>
+                        )}
                     </View>
 
                     {isFinal && (
@@ -139,6 +167,16 @@ export const GameCard = ({ game, onPickTeam, pickedTeam, getLogo }: GameCardProp
                     <View style={styles.teamInfo}>
                         <Text style={styles.teamName}>{game.homeTeam}</Text>
                         <Text style={styles.conferenceText}>{game.homeConference}</Text>
+                        {smartPick && (
+                            <Text style={styles.domText}>DOM: {smartPick.homeDom.toFixed(1)}</Text>
+                        )}
+                        {showHomeBadge && smartPick && (
+                            <View style={[styles.smartBadge, { backgroundColor: getBadgeColor(smartPick.recommendation) }]}>
+                                <Text style={styles.smartBadgeText}>
+                                    {smartPick.recommendation.toUpperCase()} (Delta: {Math.abs(smartPick.delta).toFixed(1)})
+                                </Text>
+                            </View>
+                        )}
                     </View>
 
                     {isFinal && (
@@ -343,5 +381,23 @@ const styles = StyleSheet.create({
     ouText: {
         color: '#6b7280',
         fontSize: 13,
+    },
+    domText: {
+        fontSize: 11,
+        color: '#3b82f6',
+        fontWeight: '600',
+        marginTop: 2,
+    },
+    smartBadge: {
+        marginTop: 4,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        alignSelf: 'flex-start',
+    },
+    smartBadgeText: {
+        color: '#ffffff',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
 });

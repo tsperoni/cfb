@@ -1,178 +1,228 @@
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Image, ActivityIndicator, ScrollView } from 'react-native';
-import { useGames } from '../src/hooks/useGames';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, ScrollView, TextInput, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useState, useEffect } from 'react';
+import { useSeasonStats } from '../src/hooks/useSeasonStats';
 import { useTeamLogos } from '../src/hooks/useTeamLogos';
-import { useState, useMemo } from 'react';
-import { Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Link, useRouter } from 'expo-router';
 
-interface TeamStats {
-    team: string;
-    wins: number;
-    losses: number;
-    pushes: number;
-    games: any[];
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android') {
+    if (UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
 }
 
 export default function Stats() {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [selectedWeek, setSelectedWeek] = useState<number | undefined>(undefined);
+    const [searchQuery, setSearchQuery] = useState('');
     const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
 
-    // Fetch ALL games for the year (week undefined)
-    const { games, loading } = useGames(selectedYear);
+    // Pass selectedWeek as maxWeek to filter stats up to that point
+    const { stats, loading, error, refresh } = useSeasonStats(selectedYear, selectedWeek);
     const { getLogo } = useTeamLogos();
+    const router = useRouter();
 
-    const stats = useMemo(() => {
-        const teamStats: Record<string, TeamStats> = {};
+    const filteredStats = stats.filter(teamStat =>
+        teamStat.team.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
-        games.forEach(game => {
-            // Skip if game not finished or no line
-            if (typeof game.homeScore !== 'number' || typeof game.awayScore !== 'number') return;
-            const line = game.lines?.[0];
-            if (!line) return;
+    const toggleExpand = (team: string) => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setExpandedTeam(expandedTeam === team ? null : team);
+    };
 
-            const spread = line.spread;
-            const homeMargin = game.homeScore - game.awayScore;
-
-            // Initialize teams if needed
-            if (!teamStats[game.homeTeam]) teamStats[game.homeTeam] = { team: game.homeTeam, wins: 0, losses: 0, pushes: 0, games: [] };
-            if (!teamStats[game.awayTeam]) teamStats[game.awayTeam] = { team: game.awayTeam, wins: 0, losses: 0, pushes: 0, games: [] };
-
-            // Calculate Home Result (ATS)
-            // Home covers if margin + spread > 0 (e.g. -7 spread, wins by 10. -7 + 10 = 3 > 0)
-            let homeResult = 'push';
-            if (homeMargin + spread > 0) homeResult = 'win';
-            else if (homeMargin + spread < 0) homeResult = 'loss';
-
-            // Calculate Away Result (ATS)
-            // Away covers if -(margin + spread) > 0 OR just opposite of home
-            let awayResult = 'push';
-            if (homeResult === 'win') awayResult = 'loss';
-            else if (homeResult === 'loss') awayResult = 'win';
-
-            // Update Home Stats
-            if (homeResult === 'win') teamStats[game.homeTeam].wins++;
-            else if (homeResult === 'loss') teamStats[game.homeTeam].losses++;
-            else teamStats[game.homeTeam].pushes++;
-
-            teamStats[game.homeTeam].games.push({
-                week: game.week,
-                opponent: game.awayTeam,
-                result: homeResult,
-                score: `${game.homeScore}-${game.awayScore}`,
-                spread: spread,
-                margin: homeMargin
-            });
-
-            // Update Away Stats
-            if (awayResult === 'win') teamStats[game.awayTeam].wins++;
-            else if (awayResult === 'loss') teamStats[game.awayTeam].losses++;
-            else teamStats[game.awayTeam].pushes++;
-
-            teamStats[game.awayTeam].games.push({
-                week: game.week,
-                opponent: game.homeTeam,
-                result: awayResult,
-                score: `${game.awayScore}-${game.homeScore}`,
-                spread: -spread,
-                margin: -homeMargin
-            });
-        });
-
-        // Convert to array and sort
-        return Object.values(teamStats).sort((a, b) => {
-            // Sort by Win % first
-            const aTotal = a.wins + a.losses;
-            const bTotal = b.wins + b.losses;
-            const aPct = aTotal > 0 ? a.wins / aTotal : 0;
-            const bPct = bTotal > 0 ? b.wins / bTotal : 0;
-
-            if (aPct !== bPct) return bPct - aPct;
-            // Then by total wins
-            return b.wins - a.wins;
-        });
-    }, [games]);
-
-    const renderTeamRow = ({ item }: { item: TeamStats }) => {
-        const logo = getLogo(item.team);
+    const renderItem = ({ item, index }: { item: any, index: number }) => {
+        const logoUrl = getLogo(item.team);
+        const marginColor = item.avgMargin > 0 ? '#059669' : item.avgMargin < 0 ? '#dc2626' : '#6b7280';
+        const marginPrefix = item.avgMargin > 0 ? '+' : '';
         const isExpanded = expandedTeam === item.team;
-        const total = item.wins + item.losses;
-        const pct = total > 0 ? Math.round((item.wins / total) * 100) : 0;
 
         return (
-            <TouchableOpacity
-                style={[styles.teamRow, isExpanded && styles.teamRowExpanded]}
-                onPress={() => setExpandedTeam(isExpanded ? null : item.team)}
-                activeOpacity={0.7}
-            >
-                <View style={styles.teamRowHeader}>
-                    <View style={styles.teamInfo}>
-                        <Text style={styles.rank}>#{stats.indexOf(item) + 1}</Text>
-                        {logo && <Image source={{ uri: logo }} style={styles.logo} />}
-                        <View>
-                            <Text style={styles.teamName}>{item.team}</Text>
-                            <Text style={styles.recordText}>{item.wins}-{item.losses}-{item.pushes} ATS</Text>
-                        </View>
+            <View>
+                <TouchableOpacity
+                    style={[styles.row, isExpanded && styles.rowExpanded]}
+                    onPress={() => toggleExpand(item.team)}
+                    activeOpacity={0.7}
+                >
+                    <View style={styles.rankCol}>
+                        <Text style={styles.rankText}>{index + 1}</Text>
                     </View>
-                    <View style={styles.statsRight}>
-                        <Text style={styles.pctText}>{pct}%</Text>
+                    <View style={styles.teamCol}>
+                        <Text style={styles.teamText} numberOfLines={1}>{item.team}</Text>
                     </View>
-                </View>
+                    <View style={styles.recordCol}>
+                        <Text style={styles.recordText}>
+                            {item.wins}-{item.losses}-{item.pushes}
+                        </Text>
+                        <Text style={styles.winPctText}>
+                            {item.games > 0 ? Math.round(((item.wins + item.pushes * 0.5) / item.games) * 100) : 0}%
+                        </Text>
+                    </View>
+                    <View style={styles.marginCol}>
+                        <Text style={[styles.marginText, { color: marginColor }]}>
+                            {marginPrefix}{item.avgMargin.toFixed(1)}
+                        </Text>
+                        <Ionicons
+                            name={isExpanded ? "chevron-up" : "chevron-down"}
+                            size={16}
+                            color="#9ca3af"
+                            style={{ marginTop: 4 }}
+                        />
+                    </View>
+                    <View style={styles.domCol}>
+                        <Text style={styles.domText}>
+                            {item.dominanceScore.toFixed(1)}
+                        </Text>
+                    </View>
+                </TouchableOpacity>
 
                 {isExpanded && (
-                    <View style={styles.picksList}>
-                        <View style={styles.picksHeader}>
-                            <Text style={styles.pickHeaderLabel}>Wk</Text>
-                            <Text style={[styles.pickHeaderLabel, { flex: 2 }]}>Opponent</Text>
-                            <Text style={styles.pickHeaderLabel}>Result</Text>
-                            <Text style={styles.pickHeaderLabel}>Score</Text>
+                    <View style={styles.historyContainer}>
+                        <View style={styles.historyHeader}>
+                            <Text style={[styles.historyHeaderText, { width: 30 }]}>WK</Text>
+                            <Text style={[styles.historyHeaderText, { flex: 1 }]}>OPP</Text>
+                            <Text style={[styles.historyHeaderText, { width: 45, textAlign: 'center' }]}>SPR</Text>
+                            <Text style={[styles.historyHeaderText, { width: 45, textAlign: 'center' }]}>RES</Text>
+                            <Text style={[styles.historyHeaderText, { width: 45, textAlign: 'right' }]}>DIFF</Text>
+                            <Text style={[styles.historyHeaderText, { width: 45, textAlign: 'right' }]}>MAR</Text>
+                            <Text style={[styles.historyHeaderText, { width: 45, textAlign: 'right' }]}>REL</Text>
                         </View>
-                        {item.games.sort((a, b) => b.week - a.week).map((game, idx) => {
-                            const resultColor = game.result === 'win' ? '#059669' : game.result === 'loss' ? '#dc2626' : '#6b7280';
-                            const spreadText = game.spread > 0 ? `+${game.spread}` : game.spread;
-                            const marginText = game.margin > 0 ? `+${game.margin}` : game.margin;
+                        {item.history.map((game: any, i: number) => {
+                            const relativeMargin = game.spread !== 0 ? (game.margin / Math.abs(game.spread)).toFixed(1) : '0.0';
 
                             return (
-                                <View key={idx} style={styles.pickRow}>
-                                    <Text style={styles.pickText}>{game.week}</Text>
-                                    <Text style={[styles.pickText, { flex: 2 }]} numberOfLines={1}>vs {game.opponent}</Text>
-                                    <Text style={[styles.pickText, { color: resultColor, fontWeight: '600' }]}>
-                                        {game.result.toUpperCase()} ({spreadText})
+                                <View key={i} style={styles.historyRow}>
+                                    <Text style={[styles.historyText, { width: 30 }]}>{game.week}</Text>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.historyText} numberOfLines={1}>{game.opponent}</Text>
+                                        <Text style={styles.historySubText}>{game.score}</Text>
+                                    </View>
+                                    <Text style={[styles.historyText, { width: 45, textAlign: 'center' }]}>
+                                        {game.spread > 0 ? '+' : ''}{game.spread}
                                     </Text>
-                                    <Text style={styles.pickText}>{game.score} ({marginText})</Text>
+                                    <View style={{ width: 45, alignItems: 'center' }}>
+                                        <Text style={[
+                                            styles.resultBadge,
+                                            game.result === 'win' ? styles.resultWin :
+                                                game.result === 'loss' ? styles.resultLoss : styles.resultPush
+                                        ]}>
+                                            {game.result.toUpperCase().charAt(0)}
+                                        </Text>
+                                    </View>
+                                    <Text style={[
+                                        styles.historyText,
+                                        { width: 45, textAlign: 'right' },
+                                        { color: game.scoreDiff > 0 ? '#059669' : game.scoreDiff < 0 ? '#dc2626' : '#6b7280' }
+                                    ]}>
+                                        {game.scoreDiff > 0 ? '+' : ''}{game.scoreDiff}
+                                    </Text>
+                                    <Text style={[
+                                        styles.historyText,
+                                        { width: 45, textAlign: 'right', fontWeight: 'bold' },
+                                        { color: game.margin > 0 ? '#059669' : game.margin < 0 ? '#dc2626' : '#6b7280' }
+                                    ]}>
+                                        {game.margin > 0 ? '+' : ''}{game.margin}
+                                    </Text>
+                                    <Text style={[
+                                        styles.historyText,
+                                        { width: 45, textAlign: 'right' },
+                                        { color: parseFloat(relativeMargin) > 0 ? '#059669' : parseFloat(relativeMargin) < 0 ? '#dc2626' : '#6b7280' }
+                                    ]}>
+                                        {parseFloat(relativeMargin) > 0 ? '+' : ''}{relativeMargin}
+                                    </Text>
                                 </View>
                             );
                         })}
                     </View>
                 )}
-            </TouchableOpacity>
+            </View>
         );
     };
 
-    if (loading) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#00529b" />
-            </View>
-        );
-    }
-
     return (
         <View style={styles.container}>
-
-
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>ATS Standings</Text>
-                <Text style={styles.headerSubtitle}>{selectedYear} Season</Text>
+                <View style={styles.headerTopRow}>
+                    <View style={styles.titleRow}>
+                        <Text style={styles.headerTitle}>ATS Standings</Text>
+                        <TouchableOpacity onPress={refresh} style={styles.refreshButton} disabled={loading}>
+                            {loading ? (
+                                <ActivityIndicator size="small" color="#3b82f6" />
+                            ) : (
+                                <Ionicons name="refresh" size={20} color="#3b82f6" />
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.smartPicksButton}
+                        onPress={() => router.push('/smart-picks')}
+                    >
+                        <Ionicons name="bulb" size={18} color="#ffffff" />
+                        <Text style={styles.smartPicksButtonText}>Smart Picks</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.searchContainer}>
+                    <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search teams..."
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholderTextColor="#9ca3af"
+                    />
+                </View>
             </View>
 
-            <FlatList
-                data={stats}
-                renderItem={renderTeamRow}
-                keyExtractor={item => item.team}
-                contentContainerStyle={styles.listContent}
-                ListEmptyComponent={
-                    <Text style={styles.emptyText}>No games found.</Text>
-                }
-            />
+            <View style={styles.filterContainer}>
+                <Text style={styles.filterLabel}>Through Week:</Text>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.weekFilterContent}
+                >
+                    {Array.from({ length: 18 }, (_, i) => i + 1).map((week) => (
+                        <TouchableOpacity
+                            key={week}
+                            style={[styles.weekPill, selectedWeek === week && styles.weekPillActive]}
+                            onPress={() => setSelectedWeek(week)}
+                        >
+                            <Text style={[styles.weekText, selectedWeek === week && styles.weekTextActive]}>
+                                {week}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+
+            <View style={styles.tableHeader}>
+                <Text style={[styles.headerText, styles.rankCol]}>#</Text>
+                <Text style={[styles.headerText, styles.teamCol]}>Team</Text>
+                <Text style={[styles.headerText, styles.recordCol]}>ATS Record</Text>
+                <Text style={[styles.headerText, styles.marginCol]}>Avg Margin</Text>
+                <Text style={[styles.headerText, styles.domCol]}>DOM</Text>
+            </View>
+
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#3b82f6" />
+                    <Text style={styles.loadingText}>Calculating stats...</Text>
+                </View>
+            ) : error ? (
+                <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{error}</Text>
+                </View>
+            ) : (
+                <FlatList
+                    data={filteredStats}
+                    renderItem={renderItem}
+                    keyExtractor={(item) => item.team}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                />
+            )}
+            <StatusBar style="light" />
         </View>
     );
 }
@@ -181,115 +231,246 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f5f5f5',
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
+        padding: 16,
     },
     header: {
-        padding: 16,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
+        marginBottom: 12,
     },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1f2937',
-    },
-    headerSubtitle: {
-        fontSize: 14,
-        color: '#6b7280',
-        marginTop: 2,
-    },
-    listContent: {
-        padding: 16,
-    },
-    teamRow: {
-        backgroundColor: '#ffffff',
-        borderRadius: 8,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#e5e7eb',
-        overflow: 'hidden',
-    },
-    teamRowExpanded: {
-        borderColor: '#3b82f6',
-        borderWidth: 2,
-    },
-    teamRowHeader: {
+    headerTopRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 12,
+        marginBottom: 12,
     },
-    teamInfo: {
+    titleRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-        flex: 1,
+        gap: 8,
     },
-    rank: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#9ca3af',
-        width: 24,
-    },
-    logo: {
-        width: 32,
-        height: 32,
-        borderRadius: 4,
-    },
-    teamName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#374151',
-    },
-    recordText: {
-        fontSize: 12,
-        color: '#6b7280',
-    },
-    statsRight: {
-        alignItems: 'flex-end',
-    },
-    pctText: {
-        fontSize: 18,
+    headerTitle: {
+        fontSize: 24,
         fontWeight: 'bold',
         color: '#1f2937',
     },
-    emptyText: {
-        textAlign: 'center',
-        color: '#9ca3af',
-        marginTop: 20,
+    refreshButton: {
+        padding: 4,
     },
-    picksList: {
-        borderTopWidth: 1,
-        borderTopColor: '#e5e7eb',
-        backgroundColor: '#f9fafb',
-        padding: 12,
+    searchContainer: {
+        marginTop: 0,
     },
-    picksHeader: {
+    searchInput: {
+        backgroundColor: '#ffffff',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        fontSize: 14,
+        color: '#1f2937',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+    },
+    smartPicksButton: {
         flexDirection: 'row',
-        marginBottom: 8,
-        paddingBottom: 4,
+        alignItems: 'center',
+        backgroundColor: '#3b82f6',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        gap: 6,
+    },
+    smartPicksButtonText: {
+        color: '#ffffff',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    filterContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+        backgroundColor: '#ffffff',
+        padding: 12,
+        borderRadius: 8,
+    },
+    filterLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#6b7280',
+        marginRight: 12,
+    },
+    weekFilterContent: {
+        gap: 8,
+        paddingRight: 16,
+    },
+    weekPill: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        backgroundColor: '#f3f4f6',
+        minWidth: 40,
+        alignItems: 'center',
+    },
+    weekPillActive: {
+        backgroundColor: '#3b82f6',
+    },
+    weekText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#6b7280',
+    },
+    weekTextActive: {
+        color: '#ffffff',
+    },
+    tableHeader: {
+        flexDirection: 'row',
+        paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: '#e5e7eb',
+        backgroundColor: '#ffffff',
+        borderTopLeftRadius: 8,
+        borderTopRightRadius: 8,
+        paddingHorizontal: 12,
     },
-    pickHeaderLabel: {
-        flex: 1,
-        fontSize: 11,
+    headerText: {
+        fontSize: 12,
         fontWeight: '600',
         color: '#6b7280',
         textTransform: 'uppercase',
     },
-    pickRow: {
-        flexDirection: 'row',
-        paddingVertical: 6,
+    listContent: {
+        paddingBottom: 20,
+        backgroundColor: '#ffffff',
+        borderBottomLeftRadius: 8,
+        borderBottomRightRadius: 8,
     },
-    pickText: {
+    row: {
+        flexDirection: 'row',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+    },
+    rowExpanded: {
+        backgroundColor: '#f9fafb',
+        borderBottomColor: 'transparent',
+    },
+    rankCol: {
+        width: 40,
+        alignItems: 'center',
+    },
+    teamCol: {
         flex: 1,
-        fontSize: 13,
+        paddingRight: 8,
+    },
+    recordCol: {
+        width: 100,
+        alignItems: 'center',
+    },
+    marginCol: {
+        width: 80,
+        alignItems: 'flex-end',
+    },
+    domCol: {
+        width: 50,
+        alignItems: 'flex-end',
+        paddingRight: 4,
+    },
+    rankText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#9ca3af',
+    },
+    teamText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1f2937',
+    },
+    recordText: {
+        fontSize: 14,
+        fontWeight: '600',
         color: '#374151',
+    },
+    winPctText: {
+        fontSize: 11,
+        color: '#9ca3af',
+    },
+    marginText: {
+        fontSize: 15,
+        fontWeight: 'bold',
+    },
+    domText: {
+        fontSize: 15,
+        fontWeight: 'bold',
+        color: '#3b82f6',
+    },
+    historyContainer: {
+        backgroundColor: '#f9fafb',
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+    },
+    historyHeader: {
+        flexDirection: 'row',
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e5e7eb',
+        marginBottom: 4,
+    },
+    historyHeaderText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#9ca3af',
+    },
+    historyRow: {
+        flexDirection: 'row',
+        paddingVertical: 8,
+        alignItems: 'center',
+        borderBottomWidth: 1,
+        borderBottomColor: '#f3f4f6',
+    },
+    historyText: {
+        fontSize: 13,
+        color: '#4b5563',
+    },
+    historySubText: {
+        fontSize: 11,
+        color: '#9ca3af',
+    },
+    resultBadge: {
+        fontSize: 10,
+        fontWeight: '700',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
+    resultWin: {
+        backgroundColor: '#d1fae5',
+        color: '#059669',
+    },
+    resultLoss: {
+        backgroundColor: '#fee2e2',
+        color: '#dc2626',
+    },
+    resultPush: {
+        backgroundColor: '#f3f4f6',
+        color: '#6b7280',
+    },
+    loadingContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadingText: {
+        marginTop: 12,
+        color: '#6b7280',
+    },
+    errorContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    errorText: {
+        color: '#dc2626',
     },
 });
